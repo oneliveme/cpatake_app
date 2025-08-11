@@ -6,7 +6,7 @@ const path = require("path");
 if (require("electron-squirrel-startup")) app.quit();
 
 // Check for updates except for macOS
-if (process.platform != "darwin") require("update-electron-app")({ repo: "fullmoondev/cpatake_app" });
+if (process.platform != "darwin") require("update-electron-app")({ repo: "oneliveme/cpatake_app" });
 
 const pluginPaths = {
   win32: path.join(path.dirname(__dirname), "lib/pepflashplayer.dll"),
@@ -61,7 +61,7 @@ const createWindow = () => {
   });
 
   function isAllowedOrigin(origin) {
-    return /^(https?:\/\/)?([a-zA-Z0-9-]+\.)*(dink\.cf|fullmoon\.dev|live\.net\.co|cpatake\.boo)$/.test(origin);
+    return /^(https?:\/\/)?([a-zA-Z0-9-]+\.)*(dink\.cf|onelive\.me|olcdns\.com|fullmoon\.dev|live\.net\.co|cpatake\.boo)$/.test(origin);
   }
   mainWindow.webContents.on("will-navigate", (event, urlString) => {
     const origin = new URL(urlString).origin;

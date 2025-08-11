@@ -1,7 +1,7 @@
 {
   "name": "clubpenguinatake",
   "productName": "Club Penguin Atake App",
-  "version": "5.3.1",
+  "version": "5.3.2",
   "description": "Experience all Club Penguin eras in one game, join Club Penguin Atake now!",
   "main": "src/main.js",
   "scripts": {
@@ -15,7 +15,7 @@
     "lint": "echo \"No linting configured\""
   },
   "keywords": [],
-  "author": "Fullmoon",
+  "author": "One Live",
   "license": "MIT",
   "config": {
     "forge": {
@@ -35,7 +35,7 @@
           "config": {
             "name": "clubpenguinatake",
             "productName": "Club Penguin Atake App",
-            "authors": "Fullmoon",
+            "authors": "One Live",
             "loadingGif": "./src/assets/default-splash.gif",
             "setupIcon": "./lib/icons/icon.ico"
           }
@@ -91,7 +91,7 @@
           "name": "@electron-forge/publisher-github",
           "config": {
             "repository": {
-              "owner": "fullmoondev",
+              "owner": "oneliveme",
               "name": "cpatake_app"
             },
             "prerelease": false
