@@ -5,6 +5,7 @@ on:
     branches: 
        - master
        - development
+       - 241025
 
 jobs:
   build:

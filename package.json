@@ -137,6 +137,7 @@
     ]
   },
   "dependencies": {
+    "@sentry/electron": "^7.2.0",
     "async-dialog": "0.0.1",
     "dialogs": "^2.0.1",
     "discord-rpc": "^4.0.1",

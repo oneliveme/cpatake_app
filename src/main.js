@@ -1,7 +1,10 @@
 const { app, BrowserWindow, autoUpdater } = require("electron");
 const discord_integration = require('./integrations/discord');
 const versionControl = require('./integrations/versionControl');
+const { initSentryMain } = require('./integrations/sentryIntegration');
 const path = require("path");
+
+initSentryMain();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require("electron-squirrel-startup")) app.quit();
@@ -52,6 +55,9 @@ const createWindow = () => {
     show: false,
     webPreferences: {
       plugins: true,
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: false,
+      nodeIntegration: true,
     },
   });
 
