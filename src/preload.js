@@ -1,6 +1,6 @@
 // the preload script for now only has sentry, we do not use it for anything else yet
-const { initSentryRenderer } = require('./integrations/sentryIntegration');
+const { initSentry } = require('./integrations/sentryIntegration');
 
-initSentryRenderer();
+initSentry();
 
 console.log('[Preload] Sentry initialized for renderer');
