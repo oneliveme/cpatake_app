@@ -50,7 +50,7 @@ function fetchVersionData(url) {
 
 async function loadVersionData() {
   console.log('[Version Control] Loading version data for all eras...');
-  
+
   for (const [eraName, config] of Object.entries(ERA_CONFIG)) {
     try {
       const versionData = await fetchVersionData(config.jsonUrl);
@@ -87,51 +87,51 @@ function getCacheKeyForPath(eraName, urlPath) {
   } else if (urlPath.includes('/play/v2/games/')) {
     return versions.minigameVersion;
   }
-  
+
   return null;
 }
 
 function setupVersionControl(session) {
   const cdnUrls = Object.values(ERA_CONFIG).map(config => `*://${config.cdn}/*`);
-  
+
   session.webRequest.onBeforeRequest(
     { urls: cdnUrls },
     (details, callback) => {
       const url = new URL(details.url);
       const hostname = url.hostname;
       const pathname = url.pathname;
-      
+
       if (!pathname.endsWith('.swf')) {
         callback({ cancel: false });
         return;
       }
-      
+
       if (url.searchParams.has('ver')) {
         callback({ cancel: false });
         return;
       }
-      
+
       const eraName = getEraFromCdn(hostname);
       if (!eraName) {
         callback({ cancel: false });
         return;
       }
-      
+
       const cacheKey = getCacheKeyForPath(eraName, pathname);
       if (!cacheKey) {
         callback({ cancel: false });
         return;
       }
-      
+
       url.searchParams.set('ver', cacheKey);
       const newUrl = url.toString();
-      
+
       console.log(`[Version Control] Redirecting: ${details.url} -> ${newUrl}`);
-      
+
       callback({ redirectURL: newUrl });
     }
   );
-  
+
   console.log('[Version Control] Request interception setup complete');
 }
 

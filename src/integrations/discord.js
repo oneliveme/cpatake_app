@@ -1,49 +1,64 @@
 const RPC = require('discord-rpc');
 const https = require('https');
 
-const rpcClient = new RPC.Client({ transport: 'ipc' });
 const APPLICATION_ID = '1014618385507692635';
 
 RPC.register(APPLICATION_ID);
 
+let rpcClient = null;
 let states = [];
 let currentStateIndex = 0;
-let stateInterval;
+let stateInterval = null;
 let currentActivity = null;
 let isInitialized = false;
+let isConnected = false;
+let cleanupInProgress = false;
 
 function rotateState() {
-  if (states.length === 0) return;
+  if (states.length === 0 || !rpcClient || !isConnected) return;
   currentStateIndex = (currentStateIndex + 1) % states.length;
-  rpcClient.setActivity({
-    state: states[currentStateIndex],
-    details: currentActivity?.details || "www.cpatake.boo",
-    largeImageKey: currentActivity?.largeImageKey || "logoicon-onelive",
-    startTimestamp: currentActivity?.startTimestamp || Date.now(),
-    instance: true,
-  });
+  try {
+    rpcClient.setActivity({
+      state: states[currentStateIndex],
+      details: currentActivity?.details || "www.cpatake.boo",
+      largeImageKey: currentActivity?.largeImageKey || "logoicon-onelive",
+      startTimestamp: currentActivity?.startTimestamp || Date.now(),
+      instance: true,
+    });
+  } catch (error) {
+    console.error('[Discord RPC] Error rotating state:', error);
+  }
 }
 
 async function onRpcReady() {
-  const rpcData = await updateStates();
-  if (!rpcData) return;
-  
-  currentActivity = {
-    state: rpcData.state,
-    details: rpcData.details,
-    startTimestamp: Date.now(),
-    largeImageKey: rpcData.largeImageKey,
-  };
-  
-  rpcClient.setActivity(currentActivity);
-  
-  if (stateInterval) {
-    clearInterval(stateInterval);
-    stateInterval = null;
-  }
-  
-  if (states.length > 1) {
-    stateInterval = setInterval(rotateState, 3 * 60 * 1000);
+  isConnected = true;
+  console.log('[Discord RPC] Connected');
+
+  try {
+    const rpcData = await updateStates();
+    if (!rpcData || !isConnected) return;
+
+    currentActivity = {
+      state: rpcData.state,
+      details: rpcData.details,
+      startTimestamp: Date.now(),
+      largeImageKey: rpcData.largeImageKey,
+    };
+
+    if (rpcClient && isConnected) {
+      rpcClient.setActivity(currentActivity);
+    }
+
+    if (stateInterval) {
+      clearInterval(stateInterval);
+      stateInterval = null;
+    }
+
+    if (states.length > 1 && isConnected) {
+      stateInterval = setInterval(rotateState, 3 * 60 * 1000);
+    }
+  } catch (error) {
+    console.error('[Discord RPC] Error in onRpcReady:', error);
   }
 }
 
@@ -87,7 +102,7 @@ async function updateStates() {
 
   const rpcInfo = await fetchJsonContent('https://app.cpatake.boo/assets/desktop/newrpc/info.json');
   if (!rpcInfo) return null;
-  
+
   const statesContent = await fetchTextContent(rpcInfo.statesUrl);
   if (statesContent) {
     states = statesContent.split('\n').filter(state => state.trim());
@@ -103,26 +118,59 @@ async function updateStates() {
 function initDiscordRichPresence() {
   if (isInitialized) return;
   isInitialized = true;
-  
-  rpcClient.on('ready', onRpcReady);
-  rpcClient.login({
-    clientId: APPLICATION_ID
-  }).catch(console.error);
+
+  try {
+    rpcClient = new RPC.Client({ transport: 'ipc' });
+
+    rpcClient.on('ready', onRpcReady);
+
+    rpcClient.on('disconnected', () => {
+      console.log('[Discord RPC] Disconnected');
+      isConnected = false;
+    });
+
+    rpcClient.login({
+      clientId: APPLICATION_ID
+    }).catch((error) => {
+      console.error('[Discord RPC] Login failed:', error.message);
+      isConnected = false;
+    });
+  } catch (error) {
+    console.error('[Discord RPC] Initialization failed:', error);
+  }
 }
 
-function cleanup() {
+async function cleanup() {
+  if (cleanupInProgress) return;
+  cleanupInProgress = true;
+
+  console.log('[Discord RPC] Cleaning up...');
+
   if (stateInterval) {
     clearInterval(stateInterval);
     stateInterval = null;
   }
-  
-  rpcClient.removeAllListeners('ready');
-  
+
   if (rpcClient) {
-    rpcClient.destroy().catch(console.error);
+    try {
+      rpcClient.removeAllListeners();
+
+      if (isConnected) {
+        await rpcClient.clearActivity().catch(() => { });
+        await rpcClient.destroy();
+      }
+    } catch (error) {
+      console.error('[Discord RPC] Cleanup error:', error);
+    } finally {
+      rpcClient = null;
+    }
   }
-  
+
+  isConnected = false;
   isInitialized = false;
+  cleanupInProgress = false;
+
+  console.log('[Discord RPC] Cleanup complete');
 }
 
 module.exports = { initDiscordRichPresence, cleanup };

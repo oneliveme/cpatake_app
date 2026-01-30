@@ -1,7 +1,7 @@
 {
   "name": "clubpenguinatake",
   "productName": "Club Penguin Atake App",
-  "version": "5.3.3",
+  "version": "5.3.4",
   "description": "Experience all Club Penguin eras in one game, join Club Penguin Atake now!",
   "main": "src/main.js",
   "scripts": {
@@ -116,7 +116,7 @@
       "productName": "ClubPenguinAtake",
       "category": "lib.games.clubpenguinatake"
     },
-    "copyright": "Copyright © 2025 ${author}",
+    "copyright": "Copyright © 2026 ${author}",
     "mac": {
       "icon": "./lib/icons/icon.icns",
       "category": "lib.games.clubpenguinatake"

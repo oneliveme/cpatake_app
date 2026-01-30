@@ -83,7 +83,10 @@ const createWindow = () => {
     }
   });
 
-  mainWindow.on("closed", () => (mainWindow = null));
+  mainWindow.on("closed", () => {
+    discord_integration.cleanup();
+    mainWindow = null;
+  });
 
   mainWindow.webContents.session.clearHostResolverCache();
   mainWindow.webContents.session.clearCache();
@@ -131,8 +134,25 @@ const launchMain = () => {
     }
   });
 
-  app.on('before-quit', () => {
-    discord_integration.cleanup();
+  app.on('before-quit', async (event) => {
+    event.preventDefault();
+
+    try {
+      await discord_integration.cleanup();
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
+
+    app.removeAllListeners('before-quit');
+    app.quit();
+  });
+
+  app.on('will-quit', (event) => {
+    try {
+      discord_integration.cleanup();
+    } catch (error) {
+      console.error('Error during will-quit cleanup:', error);
+    }
   });
 };
 

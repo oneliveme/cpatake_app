@@ -5,14 +5,14 @@ const APP_VERSION = require('../../package.json').version;
 function initSentry() {
   Sentry.init({
     dsn: SENTRY_DSN,
-  
+
     release: `clubpenguinatake@${APP_VERSION}`,
     environment: process.env.NODE_ENV || 'production',
     sampleRate: 1.0,
     enableAutoSessionTracking: true,
     debug: false
   });
-  
+
   console.log('[Sentry] Initialized');
 }
 
