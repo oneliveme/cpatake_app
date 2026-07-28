@@ -1,7 +1,7 @@
 {
   "name": "clubpenguinatake",
   "productName": "Club Penguin Atake App",
-  "version": "5.3.4",
+  "version": "5.4.0",
   "description": "Experience all Club Penguin eras in one game, join Club Penguin Atake now!",
   "main": "src/main.js",
   "scripts": {

@@ -1,17 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; img-src 'self'; style-src 'self'; font-src https://fonts.cdns.onelive.me;">
   <title>Club Penguin Atake</title>
-  <link rel="stylesheet" href="./style.css" media="screen" type="text/css" />
+  <link rel="stylesheet" href="./style.css" media="screen" type="text/css">
 </head>
 
 <body>
-  <center>
-    <img id="Loading_Image" src="./spin.gif" border="0" alt="">
-    <p style="padding-bottom:.3em">&nbsp;Connecting to Club Penguin Atake...</p>
-  </center>
+  <main class="splash">
+    <img class="splash__spinner" src="./spin.gif" alt="">
+    <p class="splash__message">Connecting to Club Penguin Atake&hellip;</p>
+  </main>
 </body>
 
 </html>

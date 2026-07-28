@@ -1,147 +1,104 @@
-const https = require('https');
+const { ERAS, FALLBACK_CACHE_KEYS } = require("../config");
+const { fetchJson } = require("../lib/http");
+const createLogger = require("../lib/log");
 
-const ERA_CONFIG = {
-  'AS1': {
-    host: 'as1.cpatake.boo',
-    cdn: 'antique.cpa.olcdns.com',
-    jsonUrl: 'https://nocache.fullmoon.dev/VersionControl/ClubPenguinAtake/Service/AS1.json?nocache=true'
-  },
-  'AS2': {
-    host: 'as2.cpatake.boo',
-    cdn: 'legacy.cpa.olcdns.com',
-    jsonUrl: 'https://nocache.fullmoon.dev/VersionControl/ClubPenguinAtake/Service/AS2.json?nocache=true'
-  },
-  'EP': {
-    host: 'ep.cpatake.boo',
-    cdn: 'experimentalpenguins.cpa.olcdns.com',
-    jsonUrl: 'https://nocache.fullmoon.dev/VersionControl/ClubPenguinAtake/Service/EP.json?nocache=true'
-  },
-  'PC': {
-    host: 'pc.cpatake.boo',
-    cdn: 'penguinchat.cpa.olcdns.com',
-    jsonUrl: 'https://nocache.fullmoon.dev/VersionControl/ClubPenguinAtake/Service/PC.json?nocache=true'
-  },
-  'PC3': {
-    host: 'pc3.cpatake.boo',
-    cdn: 'penguinchat3.cpa.olcdns.com',
-    jsonUrl: 'https://nocache.fullmoon.dev/VersionControl/ClubPenguinAtake/Service/PC3.json?nocache=true'
-  }
-};
+const log = createLogger("Version Control");
 
 const versionCache = {};
 
-function fetchVersionData(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          resolve(parsed);
-        } catch (error) {
-          reject(error);
-        }
-      });
-      res.on('error', reject);
-    }).on('error', reject);
-  });
+const CDN_TO_ERA = new Map(
+  Object.entries(ERAS).map(([era, config]) => [config.cdn, era])
+);
+
+const PATH_VERSION_KEYS = [
+  ["/play/v2/client/", "clientVersion"],
+  ["/play/v2/content/", "contentVersion"],
+  ["/play/v2/games/", "minigameVersion"],
+];
+
+function isValidCacheKeys(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    typeof value.clientVersion === "string" &&
+    typeof value.contentVersion === "string" &&
+    typeof value.minigameVersion === "string"
+  );
 }
 
 async function loadVersionData() {
-  console.log('[Version Control] Loading version data for all eras...');
+  log.info("Loading version data for all eras...");
 
-  for (const [eraName, config] of Object.entries(ERA_CONFIG)) {
-    try {
-      const versionData = await fetchVersionData(config.jsonUrl);
-      versionCache[eraName] = versionData.cacheKeys;
-      console.log(`[Version Control] Loaded ${eraName}:`, versionData.cacheKeys);
-    } catch (error) {
-      console.error(`[Version Control] Failed to load ${eraName}:`, error.message);
-      versionCache[eraName] = {
-        clientVersion: '000000R1',
-        contentVersion: '000000R1',
-        minigameVersion: '000000R1'
-      };
-    }
-  }
+  await Promise.all(
+    Object.entries(ERAS).map(async ([era, config]) => {
+      try {
+        const manifest = await fetchJson(config.jsonUrl);
+
+        if (!isValidCacheKeys(manifest?.cacheKeys)) {
+          throw new Error("manifest missing valid cacheKeys");
+        }
+
+        versionCache[era] = manifest.cacheKeys;
+        log.info(`Loaded ${era}:`, manifest.cacheKeys);
+      } catch (error) {
+        log.error(`Failed to load ${era}: ${error.message} — using fallback`);
+        versionCache[era] = { ...FALLBACK_CACHE_KEYS };
+      }
+    })
+  );
 }
 
-function getEraFromCdn(hostname) {
-  for (const [eraName, config] of Object.entries(ERA_CONFIG)) {
-    if (hostname === config.cdn) {
-      return eraName;
-    }
-  }
-  return null;
-}
-
-function getCacheKeyForPath(eraName, urlPath) {
-  const versions = versionCache[eraName];
+function getCacheKeyForPath(era, urlPath) {
+  const versions = versionCache[era];
   if (!versions) return null;
 
-  if (urlPath.includes('/play/v2/client/')) {
-    return versions.clientVersion;
-  } else if (urlPath.includes('/play/v2/content/')) {
-    return versions.contentVersion;
-  } else if (urlPath.includes('/play/v2/games/')) {
-    return versions.minigameVersion;
-  }
-
-  return null;
+  const match = PATH_VERSION_KEYS.find(([fragment]) => urlPath.includes(fragment));
+  return match ? versions[match[1]] : null;
 }
 
 function setupVersionControl(session) {
-  const cdnUrls = Object.values(ERA_CONFIG).map(config => `*://${config.cdn}/*`);
+  const cdnUrls = Object.values(ERAS).map((config) => `*://${config.cdn}/*`);
 
-  session.webRequest.onBeforeRequest(
-    { urls: cdnUrls },
-    (details, callback) => {
-      const url = new URL(details.url);
-      const hostname = url.hostname;
-      const pathname = url.pathname;
-
-      if (!pathname.endsWith('.swf')) {
-        callback({ cancel: false });
-        return;
-      }
-
-      if (url.searchParams.has('ver')) {
-        callback({ cancel: false });
-        return;
-      }
-
-      const eraName = getEraFromCdn(hostname);
-      if (!eraName) {
-        callback({ cancel: false });
-        return;
-      }
-
-      const cacheKey = getCacheKeyForPath(eraName, pathname);
-      if (!cacheKey) {
-        callback({ cancel: false });
-        return;
-      }
-
-      url.searchParams.set('ver', cacheKey);
-      const newUrl = url.toString();
-
-      console.log(`[Version Control] Redirecting: ${details.url} -> ${newUrl}`);
-
-      callback({ redirectURL: newUrl });
+  session.webRequest.onBeforeRequest({ urls: cdnUrls }, (details, callback) => {
+    let url;
+    try {
+      url = new URL(details.url);
+    } catch {
+      callback({ cancel: false });
+      return;
     }
-  );
 
-  console.log('[Version Control] Request interception setup complete');
+    if (!url.pathname.endsWith(".swf") || url.searchParams.has("ver")) {
+      callback({ cancel: false });
+      return;
+    }
+
+    const era = CDN_TO_ERA.get(url.hostname);
+    const cacheKey = era && getCacheKeyForPath(era, url.pathname);
+    if (!cacheKey) {
+      callback({ cancel: false });
+      return;
+    }
+
+    url.searchParams.set("ver", cacheKey);
+    log.info(`Versioned ${url.pathname} -> ver=${cacheKey}`);
+    callback({ redirectURL: url.toString() });
+  });
+
+  log.info("Request interception active");
 }
 
 async function initVersionControl(session) {
   try {
     await loadVersionData();
-    setupVersionControl(session);
-    console.log('[Version Control] Initialization complete');
   } catch (error) {
-    console.error('[Version Control] Initialization failed:', error);
+    log.error("Failed to load version data:", error);
+  }
+
+  try {
+    setupVersionControl(session);
+  } catch (error) {
+    log.error("Failed to install request interception:", error);
   }
 }
 

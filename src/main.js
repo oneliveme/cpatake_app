@@ -1,159 +1,92 @@
-const { app, BrowserWindow, autoUpdater } = require("electron");
-const discord_integration = require('./integrations/discord');
-const versionControl = require('./integrations/versionControl');
-const { initSentry } = require('./integrations/sentryIntegration');
-const path = require("path");
+const { app } = require("electron");
+
+const { APP, BEHAVIOUR } = require("./config");
+const { acquireSingleInstanceLock, installQuitHandling } = require("./app/lifecycle");
+const security = require("./app/security");
+const { createGameWindow, createSplashWindow } = require("./app/windows");
+const discord = require("./integrations/discord");
+const { initSentry, reportSecurityEvent } = require("./integrations/sentry");
+const { initVersionControl } = require("./integrations/versionControl");
+const createLogger = require("./lib/log");
+
+const log = createLogger("Main");
 
 initSentry();
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require("electron-squirrel-startup")) app.quit();
 
-// Check for updates except for macOS
-if (process.platform != "darwin") require("update-electron-app")({ repo: "oneliveme/cpatake_app" });
+if (process.platform !== "darwin") {
+  require("update-electron-app")({ repo: APP.UPDATE_REPO });
+}
 
-const pluginPaths = {
-  win32: path.join(path.dirname(__dirname), "lib/pepflashplayer.dll"),
-  darwin: path.join(path.dirname(__dirname), "lib/PepperFlashPlayer.plugin"),
-  linux: path.join(path.dirname(__dirname), "lib/libpepflashplayer.so"),
-};
+security.applyCommandLineSwitches();
+security.installCertificateHandling(reportSecurityEvent);
+security.installWebContentsHardening();
 
-if (process.platform === "linux") app.commandLine.appendSwitch("no-sandbox");
+let gameWindow = null;
 
-const pluginName = pluginPaths[process.platform];
-console.log("pluginName", pluginName);
+async function start() {
+  let splashWindow = createSplashWindow();
 
-app.commandLine.appendSwitch("ppapi-flash-path", pluginName);
-app.commandLine.appendSwitch("ppapi-flash-version", "32.0.0.371");
-app.commandLine.appendSwitch("ignore-certificate-errors");
+  const dismissSplash = () => {
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+    splashWindow = null;
+    if (gameWindow && !gameWindow.isDestroyed()) gameWindow.show();
+  };
 
-let mainWindow;
+  gameWindow = createGameWindow();
+  const { webContents } = gameWindow;
+  const gameSession = webContents.session;
 
-const createWindow = () => {
-  // Create the browser window.
-  let splashWindow = new BrowserWindow({
-    width: 600,
-    height: 320,
-    frame: false,
-    transparent: true,
-    show: false,
-  });
+  security.hardenSession(gameSession);
 
-  splashWindow.setResizable(false);
-  splashWindow.loadURL(
-    "file://" + path.join(path.dirname(__dirname), "src/index.html"),
-  );
-
-  splashWindow.on("closed", () => (splashWindow = null));
-  splashWindow.webContents.on("did-finish-load", () => {
-    splashWindow.show();
-  });
-
-  mainWindow = new BrowserWindow({
-    autoHideMenuBar: true,
-    useContentSize: true,
-    show: false,
-    webPreferences: {
-      plugins: true,
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: false,
-      nodeIntegration: true,
-    },
-  });
-
-  versionControl.initVersionControl(mainWindow.webContents.session);
-
-  mainWindow.webContents.on("did-finish-load", () => {
-    if (splashWindow) {
-      splashWindow.close();
-      mainWindow.show();
-    }
-
-    discord_integration.initDiscordRichPresence();
-  });
-
-  function isAllowedOrigin(origin) {
-    return /^(https?:\/\/)?([a-zA-Z0-9-]+\.)*(dink\.cf|onelive\.me|olcdns\.com|fullmoon\.dev|live\.net\.co|cpatake\.boo)$/.test(origin);
+  if (BEHAVIOUR.CLEAR_CACHE_ON_START) {
+    await gameSession.clearCache();
+    await gameSession.clearHostResolverCache();
   }
 
-  mainWindow.webContents.on("will-navigate", (event, urlString) => {
-    const origin = new URL(urlString).origin;
-    if (!isAllowedOrigin(origin)) {
-      event.preventDefault();
-    }
+  webContents.on("did-finish-load", () => {
+    dismissSplash();
+    discord.initDiscordRichPresence();
   });
 
-  mainWindow.on("closed", () => {
-    discord_integration.cleanup();
-    mainWindow = null;
+  webContents.on("did-fail-load", (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    log.error(`Failed to load game: ${errorDescription} (${errorCode})`);
+    dismissSplash();
   });
 
-  mainWindow.webContents.session.clearHostResolverCache();
-  mainWindow.webContents.session.clearCache();
-
-  new Promise((resolve) =>
-    setTimeout(() => {
-      mainWindow.loadURL("https://www.cpatake.boo/i/play");
-      resolve();
-    }, 5000)
-  );
-};
-
-const launchMain = () => {
-  // Disallow multiple clients running
-  if (!app.requestSingleInstanceLock()) return app.quit();
-
-  app.on("second-instance", (_event, _commandLine, _workingDirectory) => {
-    // Someone tried to run a second instance, we should focus our window.
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+  gameWindow.on("closed", () => {
+    gameWindow = null;
   });
 
-  app.setAsDefaultProtocolClient("cpatake");
+  await initVersionControl(gameSession);
+
+  if (!gameWindow || gameWindow.isDestroyed()) return;
+
+  log.info(`Loading ${APP.PLAY_URL}`);
+  gameWindow.loadURL(APP.PLAY_URL);
+}
+
+function focusExistingWindow() {
+  if (!gameWindow || gameWindow.isDestroyed()) return;
+  if (gameWindow.isMinimized()) gameWindow.restore();
+  gameWindow.focus();
+}
+
+function main() {
+  if (!acquireSingleInstanceLock(focusExistingWindow)) return;
+
+  app.setAsDefaultProtocolClient(APP.PROTOCOL);
+  installQuitHandling(() => discord.cleanup());
 
   app.whenReady().then(() => {
-    createWindow();
+    start().catch((error) => log.error("Startup failed:", error));
 
     app.on("activate", () => {
-      // On OS X it's common to re-create a window in the app when the
-      // dock icon is clicked and there are no other windows open.
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-      }
+      if (!gameWindow) start().catch((error) => log.error("Restart failed:", error));
     });
   });
+}
 
-  // Quit when all windows are closed, except on macOS. There, it's common
-  // for applications and their menu bar to stay active until the user quits
-  // explicitly with Cmd + Q.
-  app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
-      app.quit();
-    }
-  });
-
-  app.on('before-quit', async (event) => {
-    event.preventDefault();
-
-    try {
-      await discord_integration.cleanup();
-    } catch (error) {
-      console.error('Error during cleanup:', error);
-    }
-
-    app.removeAllListeners('before-quit');
-    app.quit();
-  });
-
-  app.on('will-quit', (event) => {
-    try {
-      discord_integration.cleanup();
-    } catch (error) {
-      console.error('Error during will-quit cleanup:', error);
-    }
-  });
-};
-
-launchMain();
+main();

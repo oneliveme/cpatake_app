@@ -1,6 +1,3 @@
-// the preload script for now only has sentry, we do not use it for anything else yet
-const { initSentry } = require('./integrations/sentryIntegration');
+require("@sentry/electron/preload");
 
-initSentry();
-
-console.log('[Preload] Sentry initialized for renderer');
+console.log("[Preload] Sentry IPC bridge installed");

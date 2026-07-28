@@ -1,176 +1,151 @@
-const RPC = require('discord-rpc');
-const https = require('https');
+const RPC = require("discord-rpc");
 
-const APPLICATION_ID = '1014618385507692635';
+const { DISCORD } = require("../config");
+const { fetchJson, fetchText } = require("../lib/http");
+const createLogger = require("../lib/log");
+const { isTrustedUrl } = require("../lib/trust");
 
-RPC.register(APPLICATION_ID);
+const log = createLogger("Discord RPC");
 
 let rpcClient = null;
 let states = [];
 let currentStateIndex = 0;
 let stateInterval = null;
 let currentActivity = null;
-let isInitialized = false;
+let isInitialised = false;
 let isConnected = false;
-let cleanupInProgress = false;
+let cleanupPromise = null;
 
-function rotateState() {
-  if (states.length === 0 || !rpcClient || !isConnected) return;
-  currentStateIndex = (currentStateIndex + 1) % states.length;
-  try {
-    rpcClient.setActivity({
-      state: states[currentStateIndex],
-      details: currentActivity?.details || "www.cpatake.boo",
-      largeImageKey: currentActivity?.largeImageKey || "logoicon-onelive",
-      startTimestamp: currentActivity?.startTimestamp || Date.now(),
-      instance: true,
-    });
-  } catch (error) {
-    console.error('[Discord RPC] Error rotating state:', error);
-  }
-}
-
-async function onRpcReady() {
-  isConnected = true;
-  console.log('[Discord RPC] Connected');
-
-  try {
-    const rpcData = await updateStates();
-    if (!rpcData || !isConnected) return;
-
-    currentActivity = {
-      state: rpcData.state,
-      details: rpcData.details,
-      startTimestamp: Date.now(),
-      largeImageKey: rpcData.largeImageKey,
-    };
-
-    if (rpcClient && isConnected) {
-      rpcClient.setActivity(currentActivity);
-    }
-
-    if (stateInterval) {
-      clearInterval(stateInterval);
-      stateInterval = null;
-    }
-
-    if (states.length > 1 && isConnected) {
-      stateInterval = setInterval(rotateState, 3 * 60 * 1000);
-    }
-  } catch (error) {
-    console.error('[Discord RPC] Error in onRpcReady:', error);
-  }
-}
-
-function fetchTextContent(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => resolve(data.trim()));
-      res.on('error', reject);
-    }).on('error', reject);
-  });
-}
-
-function fetchJsonContent(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (error) {
-          reject(error);
-        }
-      });
-      res.on('error', reject);
-    }).on('error', reject);
-  });
-}
-
-async function updateStates() {
-  const switchContent = await fetchTextContent('https://app.cpatake.boo/assets/desktop/newrpc/switch.txt');
-  if (switchContent === '0') {
-    return {
-      state: "Exploring the Island",
-      details: "www.cpatake.boo",
-      largeImageKey: "logoicon-onelive"
-    };
-  }
-
-  const rpcInfo = await fetchJsonContent('https://app.cpatake.boo/assets/desktop/newrpc/info.json');
-  if (!rpcInfo) return null;
-
-  const statesContent = await fetchTextContent(rpcInfo.statesUrl);
-  if (statesContent) {
-    states = statesContent.split('\n').filter(state => state.trim());
-  }
-
-  return {
-    state: states[0] || "Exploring the Island",
-    details: rpcInfo.details,
-    largeImageKey: rpcInfo.largeImageKey
-  };
-}
-
-function initDiscordRichPresence() {
-  if (isInitialized) return;
-  isInitialized = true;
-
-  try {
-    rpcClient = new RPC.Client({ transport: 'ipc' });
-
-    rpcClient.on('ready', onRpcReady);
-
-    rpcClient.on('disconnected', () => {
-      console.log('[Discord RPC] Disconnected');
-      isConnected = false;
-    });
-
-    rpcClient.login({
-      clientId: APPLICATION_ID
-    }).catch((error) => {
-      console.error('[Discord RPC] Login failed:', error.message);
-      isConnected = false;
-    });
-  } catch (error) {
-    console.error('[Discord RPC] Initialization failed:', error);
-  }
-}
-
-async function cleanup() {
-  if (cleanupInProgress) return;
-  cleanupInProgress = true;
-
-  console.log('[Discord RPC] Cleaning up...');
-
+function stopRotation() {
   if (stateInterval) {
     clearInterval(stateInterval);
     stateInterval = null;
   }
+}
+
+function rotateState() {
+  if (states.length === 0 || !rpcClient || !isConnected) return;
+
+  currentStateIndex = (currentStateIndex + 1) % states.length;
+
+  try {
+    rpcClient.setActivity({
+      ...currentActivity,
+      state: states[currentStateIndex],
+    });
+  } catch (error) {
+    log.error("Error rotating state:", error);
+  }
+}
+
+const defaultPresence = () => ({
+  state: DISCORD.DEFAULT_STATE,
+  details: DISCORD.DEFAULT_DETAILS,
+  largeImageKey: DISCORD.DEFAULT_IMAGE_KEY,
+});
+
+async function resolvePresence() {
+  const switchContent = await fetchText(DISCORD.SWITCH_URL);
+  if (switchContent === "0") return defaultPresence();
+
+  const info = await fetchJson(DISCORD.INFO_URL);
+  if (!info || typeof info !== "object") return defaultPresence();
+
+  if (typeof info.statesUrl === "string" && isTrustedUrl(info.statesUrl)) {
+    try {
+      const statesContent = await fetchText(info.statesUrl);
+      states = statesContent.split("\n").map((s) => s.trim()).filter(Boolean);
+    } catch (error) {
+      log.error("Failed to load states list:", error.message);
+    }
+  } else if (info.statesUrl) {
+    log.warn(`Ignoring untrusted statesUrl: ${info.statesUrl}`);
+  }
+
+  return {
+    state: states[0] || DISCORD.DEFAULT_STATE,
+    details: info.details || DISCORD.DEFAULT_DETAILS,
+    largeImageKey: info.largeImageKey || DISCORD.DEFAULT_IMAGE_KEY,
+  };
+}
+
+async function onRpcReady() {
+  isConnected = true;
+  log.info("Connected");
+
+  try {
+    const presence = await resolvePresence();
+
+    if (!rpcClient || !isConnected) return;
+
+    currentActivity = {
+      ...presence,
+      startTimestamp: Date.now(),
+      instance: true,
+    };
+
+    rpcClient.setActivity(currentActivity);
+
+    stopRotation();
+    if (states.length > 1) {
+      stateInterval = setInterval(rotateState, DISCORD.STATE_ROTATION_MS);
+    }
+  } catch (error) {
+    log.error("Error setting initial presence:", error);
+  }
+}
+
+function initDiscordRichPresence() {
+  if (isInitialised) return;
+  isInitialised = true;
+
+  try {
+    RPC.register(DISCORD.APPLICATION_ID);
+
+    rpcClient = new RPC.Client({ transport: "ipc" });
+
+    rpcClient.on("ready", onRpcReady);
+    rpcClient.on("disconnected", () => {
+      log.info("Disconnected");
+      isConnected = false;
+      stopRotation();
+    });
+
+    rpcClient.login({ clientId: DISCORD.APPLICATION_ID }).catch((error) => {
+      log.info(`Not connected (${error.message})`);
+      isConnected = false;
+    });
+  } catch (error) {
+    log.error("Initialisation failed:", error);
+  }
+}
+
+async function performCleanup() {
+  log.info("Cleaning up...");
+  stopRotation();
 
   if (rpcClient) {
     try {
       rpcClient.removeAllListeners();
-
       if (isConnected) {
-        await rpcClient.clearActivity().catch(() => { });
-        await rpcClient.destroy();
+        await rpcClient.clearActivity().catch(() => {});
       }
+      await rpcClient.destroy();
     } catch (error) {
-      console.error('[Discord RPC] Cleanup error:', error);
+      log.error("Cleanup error:", error);
     } finally {
       rpcClient = null;
     }
   }
 
   isConnected = false;
-  isInitialized = false;
-  cleanupInProgress = false;
+  isInitialised = false;
+  log.info("Cleanup complete");
+}
 
-  console.log('[Discord RPC] Cleanup complete');
+function cleanup() {
+  if (!cleanupPromise) cleanupPromise = performCleanup();
+  return cleanupPromise;
 }
 
 module.exports = { initDiscordRichPresence, cleanup };
