@@ -1,6 +1,6 @@
 const RPC = require("discord-rpc");
 
-const { DISCORD } = require("../config");
+const { DISCORD, PRESENCE } = require("../config");
 const { fetchJson, fetchText } = require("../lib/http");
 const createLogger = require("../lib/log");
 const { isTrustedUrl } = require("../lib/trust");
@@ -16,6 +16,13 @@ let isInitialised = false;
 let isConnected = false;
 let cleanupPromise = null;
 
+let livePresence = null;
+let sessionStart = Date.now();
+let pendingActivity = null;
+let flushTimer = null;
+let staleTimer = null;
+let lastSentAt = 0;
+
 function stopRotation() {
   if (stateInterval) {
     clearInterval(stateInterval);
@@ -23,19 +30,120 @@ function stopRotation() {
   }
 }
 
+function setActivity(activity) {
+  if (!rpcClient || !isConnected) return;
+
+  try {
+    const pending = rpcClient.setActivity(activity);
+    if (pending && typeof pending.catch === "function") {
+      pending.catch((error) => log.error("setActivity failed:", error.message));
+    }
+  } catch (error) {
+    log.error("setActivity threw:", error);
+  }
+}
+
+function flushActivity() {
+  flushTimer = null;
+  if (!pendingActivity) return;
+
+  const activity = pendingActivity;
+  pendingActivity = null;
+  lastSentAt = Date.now();
+  setActivity(activity);
+}
+
+function queueActivity(activity) {
+  pendingActivity = activity;
+  if (flushTimer) return;
+
+  const wait = Math.max(0, PRESENCE.MIN_UPDATE_INTERVAL_MS - (Date.now() - lastSentAt));
+
+  if (wait === 0) {
+    flushActivity();
+    return;
+  }
+
+  flushTimer = setTimeout(flushActivity, wait);
+  flushTimer.unref?.();
+}
+
+function buildLiveActivity(presence) {
+  const era = presence.era ? PRESENCE.ERAS[presence.era] : null;
+
+  let details;
+  if (era) {
+    details = presence.party ? `${era.label} — ${presence.party}` : era.label;
+  } else if (presence.page) {
+    details = `Browsing ${presence.page}`;
+  } else {
+    details = DISCORD.DEFAULT_DETAILS;
+  }
+
+  return {
+    details,
+    state: presence.room || presence.party || DISCORD.DEFAULT_STATE,
+    largeImageKey: era?.imageKey || DISCORD.DEFAULT_IMAGE_KEY,
+    startTimestamp: sessionStart,
+    instance: true,
+  };
+}
+
 function rotateState() {
-  if (states.length === 0 || !rpcClient || !isConnected) return;
+  if (states.length === 0 || !rpcClient || !isConnected || livePresence) return;
 
   currentStateIndex = (currentStateIndex + 1) % states.length;
 
-  try {
-    rpcClient.setActivity({
-      ...currentActivity,
-      state: states[currentStateIndex],
-    });
-  } catch (error) {
-    log.error("Error rotating state:", error);
+  queueActivity({
+    ...currentActivity,
+    state: states[currentStateIndex],
+  });
+}
+
+function startRotation() {
+  stopRotation();
+  if (livePresence || states.length <= 1) return;
+  stateInterval = setInterval(rotateState, DISCORD.STATE_ROTATION_MS);
+  stateInterval.unref?.();
+}
+
+function refreshActivity() {
+  if (!rpcClient || !isConnected) return;
+
+  if (livePresence) {
+    stopRotation();
+    queueActivity(buildLiveActivity(livePresence));
+    return;
   }
+
+  if (currentActivity) queueActivity(currentActivity);
+  startRotation();
+}
+
+function clearStaleTimer() {
+  if (!staleTimer) return;
+  clearTimeout(staleTimer);
+  staleTimer = null;
+}
+
+function applyGamePresence(presence) {
+  clearStaleTimer();
+
+  const had = Boolean(livePresence);
+  livePresence = presence || null;
+
+  if (livePresence) {
+    staleTimer = setTimeout(() => {
+      log.info("Live presence went stale — reverting to default");
+      livePresence = null;
+      refreshActivity();
+    }, PRESENCE.STALE_AFTER_MS);
+    staleTimer.unref?.();
+  } else if (had) {
+    log.info("Live presence cleared");
+  }
+
+  refreshActivity();
 }
 
 const defaultPresence = () => ({
@@ -80,16 +188,11 @@ async function onRpcReady() {
 
     currentActivity = {
       ...presence,
-      startTimestamp: Date.now(),
+      startTimestamp: sessionStart,
       instance: true,
     };
 
-    rpcClient.setActivity(currentActivity);
-
-    stopRotation();
-    if (states.length > 1) {
-      stateInterval = setInterval(rotateState, DISCORD.STATE_ROTATION_MS);
-    }
+    refreshActivity();
   } catch (error) {
     log.error("Error setting initial presence:", error);
   }
@@ -98,6 +201,7 @@ async function onRpcReady() {
 function initDiscordRichPresence() {
   if (isInitialised) return;
   isInitialised = true;
+  sessionStart = Date.now();
 
   try {
     RPC.register(DISCORD.APPLICATION_ID);
@@ -123,6 +227,14 @@ function initDiscordRichPresence() {
 async function performCleanup() {
   log.info("Cleaning up...");
   stopRotation();
+  clearStaleTimer();
+
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  pendingActivity = null;
+  livePresence = null;
 
   if (rpcClient) {
     try {
@@ -148,4 +260,4 @@ function cleanup() {
   return cleanupPromise;
 }
 
-module.exports = { initDiscordRichPresence, cleanup };
+module.exports = { applyGamePresence, initDiscordRichPresence, cleanup };

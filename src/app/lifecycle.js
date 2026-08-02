@@ -43,4 +43,8 @@ function installQuitHandling(cleanup) {
   });
 }
 
-module.exports = { acquireSingleInstanceLock, installQuitHandling };
+function isShuttingDown() {
+  return isQuitting;
+}
+
+module.exports = { acquireSingleInstanceLock, installQuitHandling, isShuttingDown };

@@ -6,6 +6,8 @@ const log = createLogger("Version Control");
 
 const versionCache = {};
 
+let isVersionDataComplete = false;
+
 const CDN_TO_ERA = new Map(
   Object.entries(ERAS).map(([era, config]) => [config.cdn, era])
 );
@@ -29,6 +31,8 @@ function isValidCacheKeys(value) {
 async function loadVersionData() {
   log.info("Loading version data for all eras...");
 
+  let allLoaded = true;
+
   await Promise.all(
     Object.entries(ERAS).map(async ([era, config]) => {
       try {
@@ -43,9 +47,12 @@ async function loadVersionData() {
       } catch (error) {
         log.error(`Failed to load ${era}: ${error.message} — using fallback`);
         versionCache[era] = { ...FALLBACK_CACHE_KEYS };
+        allLoaded = false;
       }
     })
   );
+
+  return allLoaded;
 }
 
 function getCacheKeyForPath(era, urlPath) {
@@ -89,10 +96,12 @@ function setupVersionControl(session) {
 }
 
 async function initVersionControl(session) {
-  try {
-    await loadVersionData();
-  } catch (error) {
-    log.error("Failed to load version data:", error);
+  if (!isVersionDataComplete) {
+    try {
+      isVersionDataComplete = await loadVersionData();
+    } catch (error) {
+      log.error("Failed to load version data:", error);
+    }
   }
 
   try {

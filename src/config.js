@@ -78,6 +78,25 @@ const DISCORD = {
   STATE_ROTATION_MS: 3 * 60 * 1000,
 };
 
+const PRESENCE = {
+  CHANNEL: "cpatake:presence",
+  MIN_UPDATE_INTERVAL_MS: 5000,
+  STALE_AFTER_MS: 90 * 1000,
+  MAX_TEXT_LENGTH: 64,
+  COOKIE_NAME: "cpatake_rpc",
+  COOKIE_URL: "https://www.cpatake.boo",
+  MODES: ["off", "minimal", "detailed"],
+  DEFAULT_MODE: "detailed",
+  ERAS: {
+    AS1: { label: "AS1", imageKey: "logoicon-onelive" },
+    AS2: { label: "AS2", imageKey: "logoicon-onelive" },
+    AS3: { label: "AS3", imageKey: "logoicon-onelive" },
+    EP: { label: "Experimental Penguins", imageKey: "logoicon-onelive" },
+    PC: { label: "Penguin Chat", imageKey: "logoicon-onelive" },
+    PC3: { label: "Penguin Chat 3", imageKey: "logoicon-onelive" },
+  },
+};
+
 const SENTRY = {
   DSN: "https://5779734913abdcc9df38156c539ae191@o4508235608555520.ingest.de.sentry.io/4510244448174160",
 };
@@ -92,6 +111,13 @@ const BEHAVIOUR = {
   STRICT_TLS: process.env.CPATAKE_STRICT_TLS === "1",
 };
 
+const HEALTH = {
+  SAMPLE_INTERVAL_MS: 60 * 1000,
+  WARN_MB: 1400,
+  GROWTH_WARN_MB: 700,
+  MAX_RENDERER_RECOVERIES: 3,
+};
+
 module.exports = {
   APP,
   ALLOWED_PERMISSIONS,
@@ -100,7 +126,9 @@ module.exports = {
   ERAS,
   FALLBACK_CACHE_KEYS,
   FLASH,
+  HEALTH,
   NETWORK,
+  PRESENCE,
   SENTRY,
   TRUSTED_DOMAINS,
 };

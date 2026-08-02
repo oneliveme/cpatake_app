@@ -1,11 +1,17 @@
 const { app } = require("electron");
 
-const { APP, BEHAVIOUR } = require("./config");
-const { acquireSingleInstanceLock, installQuitHandling } = require("./app/lifecycle");
+const { APP, BEHAVIOUR, HEALTH } = require("./config");
+const {
+  acquireSingleInstanceLock,
+  installQuitHandling,
+  isShuttingDown,
+} = require("./app/lifecycle");
+const health = require("./app/health");
+const presence = require("./app/presence");
 const security = require("./app/security");
 const { createGameWindow, createSplashWindow } = require("./app/windows");
 const discord = require("./integrations/discord");
-const { initSentry, reportSecurityEvent } = require("./integrations/sentry");
+const { initSentry, reportEvent, reportSecurityEvent } = require("./integrations/sentry");
 const { initVersionControl } = require("./integrations/versionControl");
 const createLogger = require("./lib/log");
 
@@ -24,6 +30,30 @@ security.installCertificateHandling(reportSecurityEvent);
 security.installWebContentsHardening();
 
 let gameWindow = null;
+let startPromise = null;
+let rendererRecoveries = 0;
+
+function recoverRenderer(contents, details) {
+  if (!gameWindow || gameWindow.isDestroyed()) return;
+  if (contents !== gameWindow.webContents) return;
+
+  if (rendererRecoveries >= HEALTH.MAX_RENDERER_RECOVERIES) {
+    log.error(`Renderer gone (${details.reason}) — recovery limit reached, leaving window as is`);
+    return;
+  }
+
+  rendererRecoveries += 1;
+  log.warn(
+    `Renderer gone (${details.reason}) — reloading ` +
+      `(${rendererRecoveries}/${HEALTH.MAX_RENDERER_RECOVERIES})`
+  );
+
+  try {
+    gameWindow.webContents.reload();
+  } catch (error) {
+    log.error("Reload after renderer crash failed:", error);
+  }
+}
 
 async function start() {
   let splashWindow = createSplashWindow();
@@ -39,6 +69,7 @@ async function start() {
   const gameSession = webContents.session;
 
   security.hardenSession(gameSession);
+  presence.installPresenceBridge(gameSession, discord.applyGamePresence);
 
   if (BEHAVIOUR.CLEAR_CACHE_ON_START) {
     await gameSession.clearCache();
@@ -46,6 +77,7 @@ async function start() {
   }
 
   webContents.on("did-finish-load", () => {
+    rendererRecoveries = 0;
     dismissSplash();
     discord.initDiscordRichPresence();
   });
@@ -56,8 +88,19 @@ async function start() {
     dismissSplash();
   });
 
+  gameWindow.on("unresponsive", () => {
+    log.warn("Game window unresponsive");
+    reportEvent("Game window unresponsive", {
+      tags: { kind: "unresponsive" },
+      extra: { uptimeSeconds: Math.round(process.uptime()) },
+    });
+  });
+
+  gameWindow.on("responsive", () => log.info("Game window responsive again"));
+
   gameWindow.on("closed", () => {
     gameWindow = null;
+    presence.clearPresence();
   });
 
   await initVersionControl(gameSession);
@@ -74,18 +117,39 @@ function focusExistingWindow() {
   gameWindow.focus();
 }
 
+function startOnce() {
+  if (gameWindow || startPromise) return startPromise ?? Promise.resolve();
+
+  startPromise = start()
+    .catch((error) => log.error("Startup failed:", error))
+    .finally(() => {
+      startPromise = null;
+    });
+
+  return startPromise;
+}
+
 function main() {
   if (!acquireSingleInstanceLock(focusExistingWindow)) return;
 
   app.setAsDefaultProtocolClient(APP.PROTOCOL);
-  installQuitHandling(() => discord.cleanup());
+
+  health.installCrashReporting({
+    report: reportEvent,
+    onRendererGone: recoverRenderer,
+    isShuttingDown,
+  });
+
+  installQuitHandling(async () => {
+    health.stopMemoryMonitor();
+    await discord.cleanup();
+  });
 
   app.whenReady().then(() => {
-    start().catch((error) => log.error("Startup failed:", error));
+    health.startMemoryMonitor(reportEvent);
+    startOnce();
 
-    app.on("activate", () => {
-      if (!gameWindow) start().catch((error) => log.error("Restart failed:", error));
-    });
+    app.on("activate", () => startOnce());
   });
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "clubpenguinatake",
   "productName": "Club Penguin Atake App",
-  "version": "5.4.0",
+  "version": "5.4.1",
   "description": "Experience all Club Penguin eras in one game, join Club Penguin Atake now!",
   "main": "src/main.js",
   "scripts": {
@@ -17,89 +17,6 @@
   "keywords": [],
   "author": "One Live",
   "license": "MIT",
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "icon": "lib/icons/icon.icns",
-        "name": "ClubPenguinAtake",
-        "executableName": "clubpenguinatake",
-        "platform": {
-          "linux": {
-            "name": "ClubPenguinAtake"
-          }
-        }
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "clubpenguinatake",
-            "productName": "Club Penguin Atake App",
-            "authors": "One Live",
-            "loadingGif": "./src/assets/default-splash.gif",
-            "setupIcon": "./lib/icons/icon.ico"
-          }
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": [
-            "darwin"
-          ]
-        },
-        {
-          "name": "@electron-forge/maker-deb",
-          "config": {
-            "options": {
-              "name": "clubpenguinatake",
-              "productName": "ClubPenguinAtake",
-              "genericName": "ClubPenguinAtake"
-            }
-          }
-        },
-        {
-          "name": "@electron-forge/maker-rpm",
-          "config": {}
-        },
-        {
-          "name": "@electron-forge/maker-flatpak",
-          "config": {
-            "genericName": "ClubPenguinAtake",
-            "productName": "ClubPenguinAtake",
-            "categories": [
-              "Game"
-            ],
-            "modules": [
-              {
-                "name": "zypak",
-                "sources": [
-                  {
-                    "type": "git",
-                    "url": "https://github.com/refi64/zypak",
-                    "tag": "v2022.04"
-                  }
-                ]
-              }
-            ],
-            "runtimeVersion": "22.08",
-            "baseVersion": "22.08",
-            "icon": "./lib/icons/icon.ico"
-          }
-        }
-      ],
-      "publishers": [
-        {
-          "name": "@electron-forge/publisher-github",
-          "config": {
-            "repository": {
-              "owner": "oneliveme",
-              "name": "cpatake_app"
-            },
-            "prerelease": false
-          }
-        }
-      ]
-    }
-  },
   "build": {
     "extraResources": [
       {
@@ -116,7 +33,7 @@
       "productName": "ClubPenguinAtake",
       "category": "lib.games.clubpenguinatake"
     },
-    "copyright": "Copyright © 2026 ${author}",
+    "copyright": "Copyright \u00a9 2026 ${author}",
     "mac": {
       "icon": "./lib/icons/icon.icns",
       "category": "lib.games.clubpenguinatake"
@@ -150,7 +67,9 @@
     "@electron-forge/cli": "^6.0.0-beta.54",
     "@electron-forge/maker-appx": "^6.0.0-beta.54",
     "@electron-forge/maker-deb": "^6.0.0-beta.54",
+    "@electron-forge/maker-dmg": "^6.4.2",
     "@electron-forge/maker-flatpak": "^6.0.0-beta.64",
+    "@electron-forge/maker-pkg": "^6.4.2",
     "@electron-forge/maker-rpm": "^6.0.0-beta.54",
     "@electron-forge/maker-squirrel": "^6.0.0-beta.54",
     "@electron-forge/maker-zip": "^6.0.0-beta.54",

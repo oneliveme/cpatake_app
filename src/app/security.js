@@ -1,3 +1,4 @@
+const fs = require("fs");
 const { app, shell } = require("electron");
 
 const { ALLOWED_PERMISSIONS, BEHAVIOUR, FLASH } = require("../config");
@@ -9,12 +10,14 @@ const log = createLogger("Security");
 function applyCommandLineSwitches() {
   const pluginPath = FLASH.PLUGIN_PATHS[process.platform];
 
-  if (pluginPath) {
+  if (!pluginPath) {
+    log.warn(`No Flash plugin bundled for platform "${process.platform}"`);
+  } else if (!fs.existsSync(pluginPath)) {
+    log.error(`Flash plugin missing at ${pluginPath} — starting without Flash`);
+  } else {
     log.info(`Flash plugin: ${pluginPath}`);
     app.commandLine.appendSwitch("ppapi-flash-path", pluginPath);
     app.commandLine.appendSwitch("ppapi-flash-version", FLASH.VERSION);
-  } else {
-    log.warn(`No Flash plugin bundled for platform "${process.platform}"`);
   }
 
   if (process.platform === "linux") {

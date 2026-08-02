@@ -24,14 +24,23 @@ function initSentry() {
   log.info("Initialised");
 }
 
-function reportSecurityEvent(message) {
+function reportEvent(message, { level = "warning", tags, extra } = {}) {
   if (!initialised) return;
 
   try {
-    Sentry.captureMessage(message, "warning");
+    Sentry.withScope((scope) => {
+      scope.setLevel(level);
+      if (tags) scope.setTags(tags);
+      if (extra) scope.setExtras(extra);
+      Sentry.captureMessage(message, level);
+    });
   } catch (error) {
-    log.error("Failed to report security event:", error);
+    log.error("Failed to report event:", error);
   }
 }
 
-module.exports = { initSentry, reportSecurityEvent };
+function reportSecurityEvent(message) {
+  reportEvent(message, { tags: { kind: "security" } });
+}
+
+module.exports = { initSentry, reportEvent, reportSecurityEvent };
