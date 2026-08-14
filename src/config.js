@@ -13,7 +13,7 @@ const ALLOWED_PERMISSIONS = ["fullscreen", "pointerLock"];
 
 const APP = {
   ROOT: APP_ROOT,
-  PLAY_URL: "https://www.cpatake.boo/i/play",
+  PLAY_URL: "https://play.cpatake.boo",
   PROTOCOL: "cpatake",
   UPDATE_REPO: "oneliveme/cpatake_app",
   SPLASH_FILE: path.join(__dirname, "index.html"),
@@ -70,11 +70,11 @@ const FALLBACK_CACHE_KEYS = {
 
 const DISCORD = {
   APPLICATION_ID: "1014618385507692635",
-  SWITCH_URL: "https://app.cpatake.boo/assets/desktop/newrpc/switch.txt",
-  INFO_URL: "https://app.cpatake.boo/assets/desktop/newrpc/info.json",
+  SWITCH_URL: "https://play.cpatake.boo/assets/desktop/newrpc/switch.txt",
+  INFO_URL: "https://play.cpatake.boo/assets/desktop/newrpc/info.json",
   DEFAULT_STATE: "Exploring the Island",
   DEFAULT_DETAILS: "www.cpatake.boo",
-  DEFAULT_IMAGE_KEY: "logoicon-onelive",
+  DEFAULT_IMAGE_KEY: "logolessicon-onelive",
   STATE_ROTATION_MS: 3 * 60 * 1000,
 };
 
@@ -88,12 +88,12 @@ const PRESENCE = {
   MODES: ["off", "minimal", "detailed"],
   DEFAULT_MODE: "detailed",
   ERAS: {
-    AS1: { label: "AS1", imageKey: "logoicon-onelive" },
-    AS2: { label: "AS2", imageKey: "logoicon-onelive" },
-    AS3: { label: "AS3", imageKey: "logoicon-onelive" },
-    EP: { label: "Experimental Penguins", imageKey: "logoicon-onelive" },
-    PC: { label: "Penguin Chat", imageKey: "logoicon-onelive" },
-    PC3: { label: "Penguin Chat 3", imageKey: "logoicon-onelive" },
+    AS1: { label: "AS1", imageKey: "old-town" },
+    AS2: { label: "AS2", imageKey: "old-town" },
+    AS3: { label: "AS3", imageKey: "new-town" },
+    EP: { label: "Experimental Penguins", imageKey: "ep" },
+    PC: { label: "Penguin Chat", imageKey: "pc" },
+    PC3: { label: "Penguin Chat 3", imageKey: "pc3-town" },
   },
 };
 
@@ -107,7 +107,7 @@ const NETWORK = {
 };
 
 const BEHAVIOUR = {
-  CLEAR_CACHE_ON_START: false,
+  CLEAR_CACHE_ON_START: true,
   STRICT_TLS: process.env.CPATAKE_STRICT_TLS === "1",
 };
 
