@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 require("@sentry/electron/preload");
 
-const { PRESENCE } = require("./config");
+const { CACHE_BUST, PRESENCE } = require("./config");
 
 contextBridge.exposeInMainWorld("cpatakeDesktop", {
   version: 1,
@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("cpatakeDesktop", {
   clearPresence: () => {
     ipcRenderer.send(PRESENCE.CHANNEL, null);
   },
+  clearCache: () => ipcRenderer.invoke(CACHE_BUST.CLEAR_CHANNEL),
+  returnToPlay: () => ipcRenderer.invoke(CACHE_BUST.RETURN_CHANNEL),
 });
 
 console.log("[Preload] Sentry IPC bridge + desktop presence API installed");

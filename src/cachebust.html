@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self'; style-src 'self'; font-src https://fonts.cdns.onelive.me;">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clear Cache - Club Penguin Atake</title>
+  <link rel="stylesheet" href="./style.css" media="screen" type="text/css">
+  <script src="./cachebust.js" defer></script>
+</head>
+<body class="cache-bust-page">
+  <main class="cache-bust">
+    <h1>Clear the app cache</h1>
+    <p>Clear cached game files and network data to resolve loading issues.</p>
+    <button class="cache-bust__button" id="clear-cache" type="button">Clear cache</button>
+    <p class="cache-bust__status" id="status" role="status" aria-live="polite">
+      The game will stay closed until you choose to return.
+    </p>
+    <button class="cache-bust__button cache-bust__button--secondary" id="return-to-play"
+      type="button" disabled>Return to play.cpatake.boo</button>
+  </main>
+</body>
+</html>

@@ -75,7 +75,7 @@ function setupVersionControl(session) {
       return;
     }
 
-    if (!url.pathname.endsWith(".swf") || url.searchParams.has("ver")) {
+    if (!/\.(?:swf|xml|json)$/i.test(url.pathname) || url.searchParams.has("ver")) {
       callback({ cancel: false });
       return;
     }

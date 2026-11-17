@@ -17,7 +17,13 @@ const APP = {
   PROTOCOL: "cpatake",
   UPDATE_REPO: "oneliveme/cpatake_app",
   SPLASH_FILE: path.join(__dirname, "index.html"),
+  CACHE_BUST_FILE: path.join(__dirname, "cachebust.html"),
   PRELOAD_FILE: path.join(__dirname, "preload.js"),
+};
+
+const CACHE_BUST = {
+  CLEAR_CHANNEL: "cpatake:clear-cache",
+  RETURN_CHANNEL: "cpatake:return-to-play",
 };
 
 const FLASH = {
@@ -122,6 +128,7 @@ module.exports = {
   APP,
   ALLOWED_PERMISSIONS,
   BEHAVIOUR,
+  CACHE_BUST,
   DISCORD,
   ERAS,
   FALLBACK_CACHE_KEYS,

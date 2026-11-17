@@ -1,6 +1,7 @@
-const { app } = require("electron");
+const { app, ipcMain } = require("electron");
+const { pathToFileURL } = require("url");
 
-const { APP, BEHAVIOUR, HEALTH } = require("./config");
+const { APP, BEHAVIOUR, CACHE_BUST, HEALTH } = require("./config");
 const {
   acquireSingleInstanceLock,
   installQuitHandling,
@@ -32,6 +33,60 @@ security.installWebContentsHardening();
 let gameWindow = null;
 let startPromise = null;
 let rendererRecoveries = 0;
+let shouldOpenCacheBust = process.argv.some(isCacheBustProtocolUrl);
+
+function isCacheBustProtocolUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === `${APP.PROTOCOL}:` &&
+      url.hostname === "cachebustpage" &&
+      (url.pathname === "" || url.pathname === "/") &&
+      !url.search &&
+      !url.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
+function assertCacheBustPageRequest(event) {
+  if (
+    event.sender !== gameWindow?.webContents ||
+    event.frameId !== 0 ||
+    event.sender.getURL() !== pathToFileURL(APP.CACHE_BUST_FILE).href
+  ) {
+    throw new Error("Cache-bust action rejected from an untrusted page");
+  }
+}
+
+function installCacheBustHandlers() {
+  ipcMain.handle(CACHE_BUST.CLEAR_CHANNEL, async (event) => {
+    assertCacheBustPageRequest(event);
+
+    const session = event.sender.session;
+    await Promise.all([
+      session.clearCache(),
+      session.clearHostResolverCache(),
+      session.clearAuthCache(),
+      session.clearStorageData({
+        storages: ["appcache", "shadercache", "serviceworkers", "cachestorage"],
+      }),
+    ]);
+
+    log.info("Electron cache cleared");
+    return true;
+  });
+
+  ipcMain.handle(CACHE_BUST.RETURN_CHANNEL, (event) => {
+    assertCacheBustPageRequest(event);
+    shouldOpenCacheBust = false;
+    event.sender.loadURL(APP.PLAY_URL).catch((error) => {
+      log.error("Failed to return to the game:", error);
+    });
+    return true;
+  });
+}
 
 function recoverRenderer(contents, details) {
   if (!gameWindow || gameWindow.isDestroyed()) return;
@@ -107,14 +162,46 @@ async function start() {
 
   if (!gameWindow || gameWindow.isDestroyed()) return;
 
+  if (shouldOpenCacheBust) {
+    if (gameWindow.webContents.getURL() === pathToFileURL(APP.CACHE_BUST_FILE).href) return;
+    log.info("Opening cache-bust page");
+    await gameWindow.loadFile(APP.CACHE_BUST_FILE);
+    return;
+  }
+
   log.info(`Loading ${APP.PLAY_URL}`);
-  gameWindow.loadURL(APP.PLAY_URL);
+  gameWindow.loadURL(APP.PLAY_URL).catch((error) => {
+    if (!shouldOpenCacheBust) log.error("Failed to load the game:", error);
+  });
 }
 
 function focusExistingWindow() {
   if (!gameWindow || gameWindow.isDestroyed()) return;
   if (gameWindow.isMinimized()) gameWindow.restore();
   gameWindow.focus();
+}
+
+function openCacheBustPage() {
+  shouldOpenCacheBust = true;
+  focusExistingWindow();
+
+  if (!gameWindow) {
+    if (app.isReady()) startOnce();
+    return;
+  }
+
+  gameWindow.loadFile(APP.CACHE_BUST_FILE).catch((error) => {
+    log.error("Failed to open cache-bust page:", error);
+  });
+}
+
+function handleSecondInstance(_event, commandLine) {
+  if (Array.isArray(commandLine) && commandLine.some(isCacheBustProtocolUrl)) {
+    openCacheBustPage();
+    return;
+  }
+
+  focusExistingWindow();
 }
 
 function startOnce() {
@@ -130,9 +217,17 @@ function startOnce() {
 }
 
 function main() {
-  if (!acquireSingleInstanceLock(focusExistingWindow)) return;
+  if (!acquireSingleInstanceLock(handleSecondInstance)) return;
 
   app.setAsDefaultProtocolClient(APP.PROTOCOL);
+
+  installCacheBustHandlers();
+
+  app.on("open-url", (event, url) => {
+    if (!isCacheBustProtocolUrl(url)) return;
+    event.preventDefault();
+    openCacheBustPage();
+  });
 
   health.installCrashReporting({
     report: reportEvent,
