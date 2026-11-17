@@ -33,7 +33,7 @@
       "productName": "ClubPenguinAtake",
       "category": "lib.games.clubpenguinatake"
     },
-    "copyright": "Copyright \u00a9 2026 ${author}",
+    "copyright": "© 2024 - 2027, Club Penguin Atake. © 2022 - 2025, New Club Penguin (the original app & source code).",
     "mac": {
       "icon": "./lib/icons/icon.icns",
       "category": "lib.games.clubpenguinatake"
